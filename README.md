@@ -857,21 +857,246 @@ The concrete classes are configured in `Program.cs`.
 This makes the code easier to test and easier to change later.
 
 ---
+---
 
-# 11. Final Result
+## Step 11: Upgrade the Project from .NET 8 to .NET 10
 
-The refactored project is clearer and better structured.
+The assignment required upgrading the project from .NET 8 to .NET 10.
 
-The main improvements are:
+### Original problem
 
-- `Item` was renamed to `Grade`;
-- `ItemController` was renamed to `GradesController`;
-- `IItemReader` was renamed to `IGradeRepository`;
-- `ItemRepository` was renamed to `InMemoryGradeRepository`;
-- statistics calculation was moved from the controller to `GradeStatisticsService`;
-- anonymous response objects were replaced with explicit response models;
-- `Console.WriteLine` was replaced with `ILogger`;
-- missing dependency injection registrations were added in `Program.cs`;
-- the route was updated from `api/item` to `api/grades`.
+The project originally targeted .NET 8:
 
-The project now better follows SOLID principles and is easier to read, test, and extend.
+```xml
+<TargetFramework>net8.0</TargetFramework>
+```
+
+### Applied change
+
+The target framework was updated in the `.csproj` file:
+
+```xml
+<TargetFramework>net10.0</TargetFramework>
+```
+
+### Why this change was made
+
+The application now targets .NET 10, as required by the assignment.
+
+After the change, the project can be built and run using the .NET 10 SDK.
+
+### Related commit
+
+```text
+Upgrade project to .NET 10
+```
+
+---
+
+## Step 12: Replace the In-Memory Repository with an External HTTP Repository
+
+The assignment required replacing the current in-memory data source with data fetched from an external endpoint.
+
+### Original problem
+
+The previous repository stored grades directly in memory:
+
+```csharp
+private readonly List<Grade> _grades = new()
+{
+    new Grade { Id = 1, Value = 9.50m },
+    new Grade { Id = 2, Value = 8.75m }
+};
+```
+
+This meant that the data was hardcoded inside the application.
+
+### Applied change
+
+The in-memory repository was replaced with `HttpGradeRepository`.
+
+The new repository fetches grades from the external endpoint configured in `appsettings.json`.
+
+```csharp
+var grades = await _httpClient.GetFromJsonAsync<List<Grade>>(_options.Url);
+```
+
+The endpoint URL was moved to configuration:
+
+```json
+{
+  "ExternalGradeSource": {
+    "Url": "EXTERNAL_ENDPOINT_URL"
+  }
+}
+```
+
+### Why this change was made
+
+The repository layer is responsible for data access. Since the data now comes from an external source, the repository was refactored to retrieve the data through HTTP instead of using a hardcoded list.
+
+### SOLID principle involved
+
+This supports the Single Responsibility Principle because the repository has one clear responsibility: fetching grade data.
+
+It also supports the Dependency Inversion Principle because the rest of the application still depends on `IGradeRepository`, not directly on `HttpGradeRepository`.
+
+### Related commit
+
+```text
+Replace in-memory repository with external HTTP repository
+```
+
+---
+
+## Step 13: Add a Service Layer for Business Logic
+
+The assignment required introducing a service layer that encapsulates the business logic.
+
+### Original problem
+
+The controller was previously closer to the data access layer. It either called the repository directly or contained business-related logic.
+
+Business rules should not be placed inside the controller.
+
+### Applied change
+
+A new service interface and implementation were added:
+
+```text
+Interfaces/IGradeService.cs
+Services/GradeService.cs
+```
+
+The service contains the business rule required by the assignment:
+
+```text
+Retrieve the first N grades that are active and passing.
+```
+
+A passing grade is a grade with a value greater than or equal to 5.
+
+```csharp
+return grades
+    .Where(grade => grade.IsActive)
+    .Where(grade => grade.Value >= 5m)
+    .Take(count)
+    .ToList();
+```
+
+### Why this change was made
+
+The service layer separates business logic from the controller and repository.
+
+The controller handles HTTP requests.
+
+The repository fetches data.
+
+The service applies business rules.
+
+### SOLID principle involved
+
+This improves the Single Responsibility Principle.
+
+Each layer now has a clearer purpose:
+
+```text
+Controller -> HTTP request/response
+Service -> business logic
+Repository -> data access
+Model -> data structure
+```
+
+### Related commit
+
+```text
+Add grade service with passing active grades filter
+```
+
+---
+
+## Step 14: Add Endpoint for the First N Passing Active Grades
+
+The assignment required that `N` is provided by the user.
+
+### Applied change
+
+A new endpoint was added to `GradesController`:
+
+```csharp
+[HttpGet("passing-active")]
+public async Task<IActionResult> GetFirstPassingActiveGrades([FromQuery] int count)
+```
+
+The endpoint can be called like this:
+
+```text
+GET /api/grades/passing-active?count=3
+```
+
+This returns the first 3 grades that are:
+
+```text
+active
+passing, meaning value >= 5
+```
+
+### Error handling
+
+If the user provides an invalid count, for example:
+
+```text
+GET /api/grades/passing-active?count=0
+```
+
+the application returns a bad request response.
+
+### Why this change was made
+
+The endpoint exposes the required filtering functionality through the Web API.
+
+The controller receives the value of `N` from the query parameter and delegates the filtering logic to the service layer.
+
+### Related commit
+
+```text
+Use grade service from controller
+```
+
+---
+
+## Step 15: Register the New Repository and Service Layer
+
+After adding the new repository and service classes, they had to be registered in `Program.cs`.
+
+### Applied change
+
+The following registrations were added:
+
+```csharp
+builder.Services.Configure<ExternalGradeSourceOptions>(
+    builder.Configuration.GetSection("ExternalGradeSource"));
+
+builder.Services.AddHttpClient<IGradeRepository, HttpGradeRepository>();
+
+builder.Services.AddScoped<IGradeService, GradeService>();
+builder.Services.AddScoped<IGradeStatisticsService, GradeStatisticsService>();
+```
+
+### Why this change was made
+
+ASP.NET Core uses dependency injection. This means that when the controller asks for `IGradeService`, the application must know which concrete class should be created.
+
+These registrations connect the interfaces to their implementations.
+
+### SOLID principle involved
+
+This supports the Dependency Inversion Principle.
+
+The controller depends on abstractions, and the concrete implementations are configured in one central place.
+
+### Related commit
+
+```text
+Register external repository and service layer
+```
