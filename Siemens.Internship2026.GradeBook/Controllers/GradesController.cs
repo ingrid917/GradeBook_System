@@ -7,16 +7,16 @@ namespace Siemens.Internship2026.GradeBook.Controllers;
 [Route("api/[controller]")]
 public class GradesController : ControllerBase
 {
-    private readonly IGradeRepository _gradeRepository;
+    private readonly IGradeService _gradeService;
     private readonly IGradeStatisticsService _gradeStatisticsService;
     private readonly ILogger<GradesController> _logger;
 
     public GradesController(
-        IGradeRepository gradeRepository,
+        IGradeService gradeService,
         IGradeStatisticsService gradeStatisticsService,
         ILogger<GradesController> logger)
     {
-        _gradeRepository = gradeRepository;
+        _gradeService = gradeService;
         _gradeStatisticsService = gradeStatisticsService;
         _logger = logger;
     }
@@ -26,13 +26,8 @@ public class GradesController : ControllerBase
     {
         _logger.LogInformation("GET api/grades called at {Time}", DateTime.UtcNow);
 
-        var grades = await _gradeRepository.GetAllAsync();
+        var grades = await _gradeService.GetAllGradesAsync();
         var response = _gradeStatisticsService.BuildResponse(grades);
-
-        _logger.LogInformation(
-            "Returning {TotalCount} grades with average value {AverageValue}",
-            response.Statistics.TotalCount,
-            response.Statistics.AverageValue);
 
         return Ok(response);
     }
@@ -42,22 +37,40 @@ public class GradesController : ControllerBase
     {
         _logger.LogInformation("GET api/grades/{Id} called at {Time}", id, DateTime.UtcNow);
 
-        if (id <= 0)
+        try
         {
-            _logger.LogWarning("Invalid grade id: {Id}", id);
+            var grade = await _gradeService.GetGradeByIdAsync(id);
 
-            return BadRequest("Id must be a positive integer.");
+            if (grade == null)
+            {
+                return NotFound($"Grade with Id {id} was not found.");
+            }
+
+            return Ok(grade);
         }
-
-        var grade = await _gradeRepository.GetByIdAsync(id);
-
-        if (grade == null)
+        catch (ArgumentException exception)
         {
-            _logger.LogWarning("Grade with id {Id} was not found.", id);
-
-            return NotFound($"Grade with Id {id} was not found.");
+            return BadRequest(exception.Message);
         }
+    }
 
-        return Ok(grade);
+    [HttpGet("passing-active")]
+    public async Task<IActionResult> GetFirstPassingActiveGrades([FromQuery] int count)
+    {
+        _logger.LogInformation(
+            "GET api/grades/passing-active called with count {Count} at {Time}",
+            count,
+            DateTime.UtcNow);
+
+        try
+        {
+            var grades = await _gradeService.GetFirstPassingActiveGradesAsync(count);
+
+            return Ok(grades);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(exception.Message);
+        }
     }
 }
