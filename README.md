@@ -422,3 +422,456 @@ GradeStatisticsService calculates statistics.
 This makes the controller smaller and easier to maintain.
 
 ---
+
+
+# 6. Replacing `ItemController` with `GradesController`
+
+## Original problem
+
+The original controller was named:
+
+```csharp
+ItemController
+```
+
+It used the route:
+
+```text
+api/item
+```
+
+This did not match the domain of the application. Since the application is a GradeBook, the controller should represent grades.
+
+The original controller also contained too much logic and used `Console.WriteLine` for logging.
+
+## Applied change
+
+The file:
+
+```text
+Controllers/ItemController.cs
+```
+
+was replaced with:
+
+```text
+Controllers/GradesController.cs
+```
+
+## Refactored code
+
+```csharp
+using Microsoft.AspNetCore.Mvc;
+using Siemens.Internship2026.GradeBook.Interfaces;
+
+namespace Siemens.Internship2026.GradeBook.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class GradesController : ControllerBase
+{
+    private readonly IGradeRepository _gradeRepository;
+    private readonly IGradeStatisticsService _gradeStatisticsService;
+    private readonly ILogger<GradesController> _logger;
+
+    public GradesController(
+        IGradeRepository gradeRepository,
+        IGradeStatisticsService gradeStatisticsService,
+        ILogger<GradesController> logger)
+    {
+        _gradeRepository = gradeRepository;
+        _gradeStatisticsService = gradeStatisticsService;
+        _logger = logger;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        _logger.LogInformation("GET api/grades called at {Time}", DateTime.UtcNow);
+
+        var grades = await _gradeRepository.GetAllAsync();
+        var response = _gradeStatisticsService.BuildResponse(grades);
+
+        _logger.LogInformation(
+            "Returning {TotalCount} grades with average value {AverageValue}",
+            response.Statistics.TotalCount,
+            response.Statistics.AverageValue);
+
+        return Ok(response);
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        _logger.LogInformation("GET api/grades/{Id} called at {Time}", id, DateTime.UtcNow);
+
+        if (id <= 0)
+        {
+            _logger.LogWarning("Invalid grade id: {Id}", id);
+
+            return BadRequest("Id must be a positive integer.");
+        }
+
+        var grade = await _gradeRepository.GetByIdAsync(id);
+
+        if (grade == null)
+        {
+            _logger.LogWarning("Grade with id {Id} was not found.", id);
+
+            return NotFound($"Grade with Id {id} was not found.");
+        }
+
+        return Ok(grade);
+    }
+}
+```
+
+## SOLID principles improved
+
+### Single Responsibility Principle
+
+The controller now only coordinates the HTTP request and response.
+
+It no longer calculates statistics directly.
+
+### Dependency Inversion Principle
+
+The controller depends on abstractions:
+
+```csharp
+IGradeRepository
+IGradeStatisticsService
+ILogger<GradesController>
+```
+
+It does not create concrete classes manually.
+
+## Why this is better
+
+The controller is now easier to understand:
+
+```text
+Request comes in.
+Controller asks repository for data.
+Controller asks service to build statistics.
+Controller returns response.
+```
+
+---
+
+
+# 7. Replacing `Console.WriteLine` with `ILogger`
+
+## Original problem
+
+The original controller used:
+
+```csharp
+Console.WriteLine($"[LOG] {DateTime.UtcNow}: GET api/item called");
+```
+
+This is not recommended in ASP.NET Core applications.
+
+ASP.NET Core provides a built-in logging abstraction called `ILogger<T>`.
+
+## SOLID principle involved
+
+This improves separation of concerns and supports the **Single Responsibility Principle**.
+
+The controller should not be tied to console output. It should use the logging abstraction provided by the framework.
+
+## Applied change
+
+The controller now receives a logger through dependency injection:
+
+```csharp
+private readonly ILogger<GradesController> _logger;
+```
+
+and uses it like this:
+
+```csharp
+_logger.LogInformation("GET api/grades called at {Time}", DateTime.UtcNow);
+```
+
+## Why this is better
+
+`ILogger` is configurable and works better in real web applications.
+
+Logs can later be redirected to:
+
+- console;
+- files;
+- cloud logging;
+- monitoring tools.
+
+---
+
+# 8. Fixing Dependency Injection in `Program.cs`
+
+## Original problem
+
+The original `Program.cs` registered only controllers:
+
+```csharp
+builder.Services.AddControllers();
+```
+
+However, the controller required dependencies through its constructor.
+
+If ASP.NET Core does not know how to create those dependencies, the application can fail at runtime.
+
+## SOLID principle involved
+
+This is connected to the **Dependency Inversion Principle**.
+
+Depending on interfaces is good, but the concrete implementations must be registered in the dependency injection container.
+
+## Applied change
+
+`Program.cs` was updated to register the required services.
+
+## Refactored code
+
+```csharp
+using Siemens.Internship2026.GradeBook.Interfaces;
+using Siemens.Internship2026.GradeBook.Repositories;
+using Siemens.Internship2026.GradeBook.Services;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+
+builder.Services.AddSingleton<IGradeRepository, InMemoryGradeRepository>();
+builder.Services.AddScoped<IGradeStatisticsService, GradeStatisticsService>();
+
+var app = builder.Build();
+
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();
+```
+
+## Why this is better
+
+The dependency injection container now knows:
+
+```text
+IGradeRepository -> InMemoryGradeRepository
+IGradeStatisticsService -> GradeStatisticsService
+```
+
+So when ASP.NET Core creates `GradesController`, it can inject the correct dependencies.
+
+---
+
+# 9. Updating the API Route
+
+## Original route
+
+The original route was:
+
+```text
+api/item
+```
+
+## New route
+
+After renaming `ItemController` to `GradesController`, the route became:
+
+```text
+api/grades
+```
+
+This is because of the route attribute:
+
+```csharp
+[Route("api/[controller]")]
+```
+
+In ASP.NET Core, `[controller]` uses the controller name without the `Controller` suffix.
+
+So:
+
+```text
+GradesController -> grades
+```
+
+## Applied change
+
+If `Properties/launchSettings.json` contained:
+
+```json
+"launchUrl": "api/item"
+```
+
+it was updated to:
+
+```json
+"launchUrl": "api/grades"
+```
+
+## Why this is better
+
+The route now matches the domain of the project.
+
+Before:
+
+```text
+/api/item
+```
+
+After:
+
+```text
+/api/grades
+```
+
+---
+
+# 10. SOLID Principles After Refactoring
+
+## Single Responsibility Principle
+
+Each class now has a clearer responsibility.
+
+```text
+GradesController
+```
+
+Handles HTTP requests and responses.
+
+```text
+InMemoryGradeRepository
+```
+
+Handles data access.
+
+```text
+GradeStatisticsService
+```
+
+Calculates statistics and builds the response.
+
+```text
+Grade
+GradeStatistics
+GradeBookResponse
+```
+
+Represent data models.
+
+This is better than having the controller do everything.
+
+---
+
+## Open/Closed Principle
+
+The code is easier to extend without modifying the controller.
+
+For example, if new statistics are needed, such as:
+
+- minimum grade;
+- maximum grade;
+- number of grades above 9;
+
+these changes can be made mainly in `GradeStatisticsService`.
+
+The controller does not need to know the details of how statistics are calculated.
+
+---
+
+## Liskov Substitution Principle
+
+The controller depends on the interface:
+
+```csharp
+IGradeRepository
+```
+
+This means another implementation could replace `InMemoryGradeRepository`.
+
+For example:
+
+```csharp
+public class DatabaseGradeRepository : IGradeRepository
+{
+    public Task<Grade?> GetByIdAsync(int id)
+    {
+        // read from database
+    }
+
+    public Task<IEnumerable<Grade>> GetAllAsync()
+    {
+        // read from database
+    }
+}
+```
+
+As long as the new class respects the interface contract, the controller can use it without changes.
+
+---
+
+## Interface Segregation Principle
+
+The interfaces are small and focused.
+
+```csharp
+public interface IGradeRepository
+{
+    Task<Grade?> GetByIdAsync(int id);
+
+    Task<IEnumerable<Grade>> GetAllAsync();
+}
+```
+
+```csharp
+public interface IGradeStatisticsService
+{
+    GradeBookResponse BuildResponse(IEnumerable<Grade> grades);
+}
+```
+
+No class is forced to implement unnecessary methods.
+
+---
+
+## Dependency Inversion Principle
+
+The controller depends on abstractions, not concrete implementations.
+
+It depends on:
+
+```csharp
+IGradeRepository
+IGradeStatisticsService
+ILogger<GradesController>
+```
+
+The concrete classes are configured in `Program.cs`.
+
+This makes the code easier to test and easier to change later.
+
+---
+
+# 11. Final Result
+
+The refactored project is clearer and better structured.
+
+The main improvements are:
+
+- `Item` was renamed to `Grade`;
+- `ItemController` was renamed to `GradesController`;
+- `IItemReader` was renamed to `IGradeRepository`;
+- `ItemRepository` was renamed to `InMemoryGradeRepository`;
+- statistics calculation was moved from the controller to `GradeStatisticsService`;
+- anonymous response objects were replaced with explicit response models;
+- `Console.WriteLine` was replaced with `ILogger`;
+- missing dependency injection registrations were added in `Program.cs`;
+- the route was updated from `api/item` to `api/grades`.
+
+The project now better follows SOLID principles and is easier to read, test, and extend.

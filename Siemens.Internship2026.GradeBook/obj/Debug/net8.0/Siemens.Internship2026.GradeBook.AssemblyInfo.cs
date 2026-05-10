@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Siemens.Internship2026.GradeBook")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+829913f012017e946943e3d55cb12cdcfb97f401")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f18343dfa0b6f0ee5b8594c71eb881dc5b93d558")]
 [assembly: System.Reflection.AssemblyProductAttribute("Siemens.Internship2026.GradeBook")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Siemens.Internship2026.GradeBook")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
