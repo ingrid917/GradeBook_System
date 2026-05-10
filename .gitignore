@@ -53,3 +53,20 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+
+# Build results
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Rider / JetBrains
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
