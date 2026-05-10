@@ -238,3 +238,187 @@ The name `InMemoryGradeRepository` explains exactly what the class does:
 The class no longer exposes unnecessary protected members or virtual methods.
 
 ---
+
+
+# 4. Adding Explicit Response Models
+
+## Original problem
+
+The original controller created the API response using an anonymous object:
+
+```csharp
+return Ok(new
+{
+    Data = itemList,
+    Statistics = new
+    {
+        TotalCount = totalCount,
+        AverageValue = averageValue,
+        RetrievedAt = DateTime.UtcNow
+    }
+});
+```
+
+This works, but it makes the API response structure less explicit.
+
+If the response becomes more complex, anonymous objects can make the code harder to understand, test, and document.
+
+## Applied change
+
+Two explicit response models were added:
+
+```text
+Models/GradeStatistics.cs
+Models/GradeBookResponse.cs
+```
+
+## Refactored code: `GradeStatistics.cs`
+
+```csharp
+namespace Siemens.Internship2026.GradeBook.Models;
+
+public class GradeStatistics
+{
+    public int TotalCount { get; set; }
+
+    public decimal AverageValue { get; set; }
+
+    public DateTime RetrievedAt { get; set; }
+}
+```
+
+## Refactored code: `GradeBookResponse.cs`
+
+```csharp
+namespace Siemens.Internship2026.GradeBook.Models;
+
+public class GradeBookResponse
+{
+    public IEnumerable<Grade> Data { get; set; } = new List<Grade>();
+
+    public GradeStatistics Statistics { get; set; } = new();
+}
+```
+
+## SOLID principle involved
+
+This mainly improves maintainability and supports the **Single Responsibility Principle**.
+
+The response structure is now represented by model classes instead of being constructed directly inside the controller.
+
+## Why this is better
+
+The API response is now explicit:
+
+```text
+GradeBookResponse
+ ├── Data
+ └── Statistics
+```
+
+This makes the code easier to read and easier to extend.
+
+---
+
+
+# 5. Moving Statistics Calculation to a Service
+
+## Original problem
+
+In the original controller, the `GetAll()` method calculated statistics directly:
+
+```csharp
+var items = await _reader.GetAllAsync();
+var itemList = items.ToList();
+
+var totalCount = itemList.Count;
+var averageValue = itemList.Any() ? itemList.Average(i => i.Value) : 0;
+```
+
+This means the controller was responsible for:
+
+- receiving the HTTP request;
+- reading data;
+- calculating statistics;
+- building the response;
+- logging information.
+
+This is too much for one controller method.
+
+## SOLID principle violated
+
+This violates the **Single Responsibility Principle**.
+
+A controller should mainly handle HTTP requests and responses. Business logic, such as calculating statistics, should be moved to a service.
+
+## Applied change
+
+A new service interface and implementation were added:
+
+```text
+Interfaces/IGradeStatisticsService.cs
+Services/GradeStatisticsService.cs
+```
+
+## Refactored code: `IGradeStatisticsService.cs`
+
+```csharp
+using Siemens.Internship2026.GradeBook.Models;
+
+namespace Siemens.Internship2026.GradeBook.Interfaces;
+
+public interface IGradeStatisticsService
+{
+    GradeBookResponse BuildResponse(IEnumerable<Grade> grades);
+}
+```
+
+## Refactored code: `GradeStatisticsService.cs`
+
+```csharp
+using Siemens.Internship2026.GradeBook.Interfaces;
+using Siemens.Internship2026.GradeBook.Models;
+
+namespace Siemens.Internship2026.GradeBook.Services;
+
+public class GradeStatisticsService : IGradeStatisticsService
+{
+    public GradeBookResponse BuildResponse(IEnumerable<Grade> grades)
+    {
+        var gradeList = grades.ToList();
+
+        var statistics = new GradeStatistics
+        {
+            TotalCount = gradeList.Count,
+            AverageValue = gradeList.Any() ? gradeList.Average(grade => grade.Value) : 0,
+            RetrievedAt = DateTime.UtcNow
+        };
+
+        return new GradeBookResponse
+        {
+            Data = gradeList,
+            Statistics = statistics
+        };
+    }
+}
+```
+
+## Why this is better
+
+The controller no longer calculates statistics.
+
+Before:
+
+```text
+Controller calculates statistics.
+```
+
+After:
+
+```text
+GradeStatisticsService calculates statistics.
+```
+
+This makes the controller smaller and easier to maintain.
+
+---
